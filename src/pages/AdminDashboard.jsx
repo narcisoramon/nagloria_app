@@ -149,54 +149,6 @@ export default function AdminDashboard() {
     setExpResultados([])
   }
 
-  const normalizarFechaMovimiento = (m) => {
-  const fecha = new Date(m.fecha_hora).getTime()
-  return Number.isNaN(fecha) ? 0 : fecha
-}
-
-const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
-  if (!movimientos || movimientos.length === 0) return 0
-
-  if (!todosModo) {
-    const ordenados = [...movimientos].sort((a, b) => {
-      const fechaA = normalizarFechaMovimiento(a)
-      const fechaB = normalizarFechaMovimiento(b)
-
-      if (fechaB !== fechaA) return fechaB - fechaA
-
-      return Number(b.id || 0) - Number(a.id || 0)
-    })
-
-    return parseFloat(ordenados[0]?.saldo_actual || 0)
-  }
-
-  const ultimosPorCliente = {}
-
-  movimientos.forEach((m) => {
-    const clienteId = m.cliente_id || m.cliente?.id || 'sin_cliente'
-    const actual = ultimosPorCliente[clienteId]
-
-    if (!actual) {
-      ultimosPorCliente[clienteId] = m
-      return
-    }
-
-    const fechaActual = normalizarFechaMovimiento(actual)
-    const fechaNueva = normalizarFechaMovimiento(m)
-
-    if (
-      fechaNueva > fechaActual ||
-      (fechaNueva === fechaActual && Number(m.id || 0) > Number(actual.id || 0))
-    ) {
-      ultimosPorCliente[clienteId] = m
-    }
-  })
-
-  return Object.values(ultimosPorCliente).reduce((s, m) => {
-    return s + parseFloat(m.saldo_actual || 0)
-  }, 0)
-}
-
   const exportarCC = async () => {
     if (!expDesde || !expHasta) return
     setExportando(true)
@@ -233,7 +185,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
       // Totales
       const totalCompras = movimientos.filter((m) => m.tipo_movimiento === 'DEBITO').reduce((s, m) => s + parseFloat(m.monto), 0)
       const totalPagos   = movimientos.filter((m) => m.tipo_movimiento === 'CREDITO').reduce((s, m) => s + parseFloat(m.monto), 0)
-      const saldoFinal = calcularSaldoPendienteExportacion(movimientos, todosModo)
+      const saldoFinal   = movimientos.length ? parseFloat(movimientos[0].saldo_actual) : 0
 
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.json_to_sheet([])
@@ -241,7 +193,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
       // ── Encabezado ────────────────────────────────────────────────────────
       const titulo = todosModo ? 'ESTADO DE CUENTA - TODOS LOS CLIENTES' : `ESTADO DE CUENTA - ${expClienteNombre}`
       XLSX.utils.sheet_add_aoa(ws, [
-        ['ÑA GLORIA - Restaurante & Comedor'],
+        ['LA GLORIA - Restaurante & Comedor'],
         [titulo],
         [`Período: ${expDesde} al ${expHasta}`],
         [`Generado: ${new Date().toLocaleString('es-PY')}`],
@@ -262,7 +214,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
         ['', 'Total pagos realizados:', '', '', `Gs. ${fmtGs(totalPagos)}`],
         ['', 'Saldo pendiente:', '', '', `Gs. ${fmtGs(saldoFinal)}`],
         [],
-        ['', 'Este documento es un resumen de su cuenta corriente en Ña Gloria.'],
+        ['', 'Este documento es un resumen de su cuenta corriente en La Gloria.'],
       ], { origin: { r: filaResumen, c: 0 } })
 
       // ── Anchos ────────────────────────────────────────────────────────────
@@ -284,9 +236,6 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
       setExportando(false)
     }
   }
-
-
-
   // ──────────────────────────────────────────────────────────────────────────
 
   const maxProd = datos?.topProductos?.[0]?.total || 1
@@ -336,7 +285,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(22)
       doc.setTextColor(...BLANCO)
-      doc.text('ÑA GLORIA', 14, 14)
+      doc.text('LA GLORIA', 14, 14)
 
       // Subtítulo
       doc.setFont('helvetica', 'italic')
@@ -467,7 +416,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
       const finalY = (doc.lastAutoTable?.finalY || 54) + 8
       const totalCompras = movimientos.filter((m) => m.tipo_movimiento === 'DEBITO').reduce((s, m) => s + parseFloat(m.monto), 0)
       const totalPagos   = movimientos.filter((m) => m.tipo_movimiento === 'CREDITO').reduce((s, m) => s + parseFloat(m.monto), 0)
-      const saldoFinal = calcularSaldoPendienteExportacion(movimientos, todosModo)
+      const saldoFinal   = parseFloat(movimientos[0]?.saldo_actual || 0)
 
       autoTable(doc, {
         startY: finalY,
@@ -504,7 +453,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
         doc.setFont('helvetica', 'italic')
         doc.setFontSize(7)
         doc.setTextColor(...DORADO2)
-        doc.text('Ña Gloria - Documento confidencial para uso del cliente', 14, H - 5)
+        doc.text('La Gloria - Documento confidencial para uso del cliente', 14, H - 5)
         doc.text(`Página ${i} de ${pageCount}`, W - 14, H - 5, { align: 'right' })
       }
 
@@ -540,6 +489,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
         </div>
         <div style={s.navRight}>
           <button onClick={abrirExport} style={s.navBtn}>📥 Exportar CC</button>
+          <button onClick={() => navigate('/admin/reporte-ventas')} style={s.navBtn}>🧾 Ventas</button>
           <button onClick={() => navigate('/configuracion')} style={s.navBtn}>⚙️ Config</button>
           <button onClick={handleLogout} style={s.navLogout}>Salir</button>
         </div>
@@ -643,7 +593,7 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
             </div>
 
             {/* ── Últimos tickets ── */}
-            <div style={{...s.panel, gridColumn:'1 / -1', overflowX:'auto'}}>
+            <div style={{...s.panel, gridColumn:'span 2'}}>
               <h3 style={s.panelTitulo}>🧾 Últimos tickets cobrados</h3>
               {datos.ultimosTickets.length === 0 ? (
                 <p style={s.vacio}>Sin tickets</p>
@@ -740,27 +690,27 @@ const calcularSaldoPendienteExportacion = (movimientos, todosModo) => {
 
 const s = {
   root: { minHeight:'100vh', display:'flex', flexDirection:'column', background:'#f5f0ea', fontFamily:'system-ui,sans-serif' },
-  nav: { background:'#2c1a08', color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.55rem clamp(0.7rem, 3vw, 1.2rem)', minHeight:54, flexShrink:0, gap:'0.7rem', flexWrap:'wrap' },
+  nav: { background:'#2c1a08', color:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 1.2rem', height:54, flexShrink:0, gap:'1rem' },
   navLeft: { display:'flex', alignItems:'center', gap:'0.8rem', flexShrink:0 },
   navLogo: { width:32, height:32, background:'#b8732a', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700 },
   navTitulo: { fontSize:15, fontWeight:700 },
   navSub: { fontSize:12, color:'#c9b99a' },
-  navCenter: { display:'flex', gap:'0.4rem', flexWrap:'wrap' },
-  navRight: { display:'flex', alignItems:'center', gap:'0.5rem', flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' },
-  navBtn: { background:'transparent', border:'1px solid #5a3a1a', color:'#c9b99a', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:12 },
-  navLogout: { background:'transparent', border:'1px solid #5a3a1a', color:'#c9b99a', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:12 },
-  periodoBtn: { padding:'5px 14px', border:'1px solid #5a3a1a', borderRadius:16, background:'transparent', color:'#c9b99a', cursor:'pointer', fontSize:12 },
+  navCenter: { display:'flex', gap:'0.4rem' },
+  navRight: { display:'flex', alignItems:'center', gap:'0.6rem', flexShrink:0 },
+  navBtn: { background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:6, padding:'5px 12px', cursor:'pointer', fontSize:12, fontWeight:500 },
+  navLogout: { background:'transparent', border:'1px solid #c0392b', color:'#f5c6c6', borderRadius:6, padding:'5px 12px', cursor:'pointer', fontSize:12 },
+  periodoBtn: { padding:'5px 14px', border:'1px solid rgba(255,255,255,0.25)', borderRadius:16, background:'transparent', color:'#e0d0bb', cursor:'pointer', fontSize:12 },
   periodoBtnOn: { background:'#b8732a', color:'#fff', border:'1px solid #b8732a' },
   loading: { flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:'#8a7560', fontSize:14 },
-  body: { flex:1, padding:'clamp(0.7rem, 3vw, 1.2rem)' , display:'flex', flexDirection:'column', gap:'1rem' },
+  body: { flex:1, padding:'1.2rem', display:'flex', flexDirection:'column', gap:'1rem' },
 
-  cards: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:'1rem' },
+  cards: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'1rem' },
   card: { background:'#fff', borderRadius:12, padding:'1rem 1.2rem', display:'flex', flexDirection:'column', gap:4, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' },
   cardLabel: { fontSize:11, fontWeight:600, color:'#8a7560', textTransform:'uppercase', letterSpacing:'0.06em' },
   cardVal: { fontSize:22, fontWeight:800, color:'#2c1a08' },
   cardSub: { fontSize:11, color:'#8a7560' },
 
-  grid: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(280px,100%),1fr))', gap:'1rem', flex:1 },
+  grid: { display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'1rem', flex:1 },
   panel: { background:'#fff', borderRadius:12, padding:'1.2rem', boxShadow:'0 1px 4px rgba(0,0,0,0.06)', display:'flex', flexDirection:'column', gap:'0.6rem' },
   panelTitulo: { margin:0, fontSize:14, fontWeight:700, color:'#2c1a08', paddingBottom:'0.4rem', borderBottom:'1px solid #f0e8dc' },
   vacio: { color:'#8a7560', fontSize:13, textAlign:'center', padding:'1rem 0', margin:0 },
@@ -785,15 +735,15 @@ const s = {
   deudorNombre: { fontSize:12, color:'#2c1a08', flex:1 },
   deudorMonto: { fontSize:13, fontWeight:700, color:'#c0392b' },
 
-  tabla: { width:'100%', minWidth:650, borderCollapse:'collapse', fontSize:13 },
+  tabla: { width:'100%', borderCollapse:'collapse', fontSize:13 },
   th: { padding:'6px 10px', background:'#f5f0ea', color:'#4a3520', fontWeight:600, textAlign:'left', borderBottom:'1px solid #e8e0d0' },
   td: { padding:'7px 10px', borderBottom:'1px solid #f5f0ea', color:'#2c1a08' },
   ticketNum: { fontWeight:700, color:'#b8732a' },
 }
 
 const sx = {
-  overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'clamp(0.5rem, 3vw, 1rem)', boxSizing:'border-box' },
-  modal: { background:'#fff', borderRadius:14, width:'100%', maxWidth:420, boxSizing:'border-box' },
+  overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'1rem' },
+  modal: { background:'#fff', borderRadius:14, width:'100%', maxWidth:420 },
   modalHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'1rem 1.2rem', borderBottom:'1px solid #e8e0d0' },
   modalTitulo: { margin:0, fontSize:16, fontWeight:700, color:'#2c1a08' },
   closeBtn: { background:'transparent', border:'none', fontSize:18, cursor:'pointer', color:'#8a7560' },
@@ -801,7 +751,7 @@ const sx = {
   field: { display:'flex', flexDirection:'column', gap:4 },
   label: { fontSize:12, fontWeight:600, color:'#4a3520' },
   input: { padding:'8px 10px', border:'1px solid #ddd0be', borderRadius:7, fontSize:14, outline:'none', background:'#fdfaf6' },
-  modalFooter: { display:'flex', justifyContent:'flex-end', flexWrap:'wrap', gap:'0.6rem', padding:'0.8rem 1.2rem', borderTop:'1px solid #e8e0d0' },
+  modalFooter: { display:'flex', justifyContent:'flex-end', gap:'0.6rem', padding:'0.8rem 1.2rem', borderTop:'1px solid #e8e0d0' },
   cancelBtn: { padding:'8px 16px', background:'transparent', border:'1px solid #ddd0be', borderRadius:7, cursor:'pointer', fontSize:13 },
   exportBtn: { padding:'8px 20px', background:'#1a7a4a', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontSize:13, fontWeight:600 },
   dropdown: { border:'1px solid #ddd0be', borderRadius:7, background:'#fff', boxShadow:'0 4px 12px rgba(0,0,0,0.1)', display:'flex', flexDirection:'column', maxHeight:180, overflowY:'auto' },

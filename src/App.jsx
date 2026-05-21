@@ -13,6 +13,7 @@ import CierreCaja from './pages/CierreCaja'
 import Clientes from './pages/Clientes'
 import Configuracion from './pages/Configuracion'
 import AdminDashboard from './pages/AdminDashboard'
+import ReporteVentas from './pages/ReporteVentas'
 
 function VendedorRoute({ children }) {
   const { user } = useAuthStore()
@@ -80,6 +81,7 @@ export default function App() {
 
         <Route element={<AdminRoute />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/reporte-ventas" element={<ReporteVentas />} />
           <Route path="/configuracion" element={<Configuracion />} />
         </Route>
 
