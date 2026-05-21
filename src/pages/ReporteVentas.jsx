@@ -109,35 +109,52 @@ export default function ReporteVentas() {
 
   const POR_PAGINA = 20
 
-  const buscar = async () => {
-    setBuscando(true)
-    setBuscado(false)
-    setPaginaActual(1)
+const buscar = async () => {
+  setBuscando(true)
+  setBuscado(false)
+  setPaginaActual(1)
 
-    try {
-      const params = {
-        desde,
-        hasta,
-        per_page: 500,
-      }
-
-      if (estado) params.estado = estado
-      if (formaPago) params.forma_pago = formaPago
-      if (tipoVenta) params.tipo_venta = tipoVenta
-
-      const { data } = await client.get('/tickets', { params })
-
-      const lista = data.data || data || []
-
-      setTickets(Array.isArray(lista) ? lista : [])
-      setBuscado(true)
-    } catch (e) {
-      console.error(e)
-      alert('No se pudo obtener el reporte de ventas.')
-    } finally {
-      setBuscando(false)
+  try {
+    const params = {
+      desde,
+      hasta,
+      per_page: 500,
     }
+
+    if (formaPago) params.forma_pago = formaPago
+    if (tipoVenta) params.tipo_venta = tipoVenta
+
+    // IMPORTANTE:
+    // No enviamos "estado" al backend porque este filtro corresponde
+    // al estado de cuenta calculado: PAGADO, PENDIENTE, ANULADO.
+    // El backend filtra por estado real del ticket y por eso no traía resultados.
+
+    const { data } = await client.get('/tickets', { params })
+
+    let lista = data.data || data || []
+    lista = Array.isArray(lista) ? lista : []
+
+    if (estado) {
+      lista = lista.filter((t) => {
+        const e = estadoCuenta(t).toLowerCase()
+
+        if (estado === 'pendiente') return e === 'pendiente'
+        if (estado === 'pagado') return e === 'pagado'
+        if (estado === 'anulado') return e === 'anulado'
+
+        return true
+      })
+    }
+
+    setTickets(lista)
+    setBuscado(true)
+  } catch (e) {
+    console.error(e)
+    alert('No se pudo obtener el reporte de ventas.')
+  } finally {
+    setBuscando(false)
   }
+}
 
   const totalVentas = tickets.reduce((s, t) => s + (parseFloat(t.total) || 0), 0)
 
@@ -209,7 +226,7 @@ export default function ReporteVentas() {
       XLSX.utils.sheet_add_aoa(
         ws,
         [
-          ['LA GLORIA - Reporte de Ventas'],
+          ['ÑA GLORIA - Reporte de Ventas'],
           [`Período: ${desde} al ${hasta}`],
           [
             `Total tickets: ${tickets.length} | Total ventas: ${fmtGs(totalVentas)} | Total cobrado: ${fmtGs(totalCobrado)} | Saldo pendiente: ${fmtGs(totalPendiente)}`,
@@ -288,7 +305,7 @@ export default function ReporteVentas() {
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(20)
       doc.setTextColor(...BLANCO)
-      doc.text('LA GLORIA', 12, 12)
+      doc.text('ÑA GLORIA', 12, 12)
 
       doc.setFont('helvetica', 'italic')
       doc.setFontSize(9)
@@ -470,7 +487,7 @@ export default function ReporteVentas() {
         doc.setFont('helvetica', 'italic')
         doc.setFontSize(7)
         doc.setTextColor(...DORADO2)
-        doc.text('La Gloria - Reporte de Ventas', 12, H - 4)
+        doc.text('ÑA GLORIA - Reporte de Ventas', 12, H - 4)
         doc.text(`Página ${i} de ${pages}`, W - 12, H - 4, { align: 'right' })
       }
 
@@ -568,7 +585,7 @@ export default function ReporteVentas() {
         </div>
 
         <div style={s.filtroGroup}>
-          <label style={s.filtroLabel}>Estado ticket</label>
+          <label style={s.filtroLabel}>Estado cuenta</label>
           <select
             value={estado}
             onChange={(e) => setEstado(e.target.value)}

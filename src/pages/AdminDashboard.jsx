@@ -193,7 +193,7 @@ export default function AdminDashboard() {
       // ── Encabezado ────────────────────────────────────────────────────────
       const titulo = todosModo ? 'ESTADO DE CUENTA - TODOS LOS CLIENTES' : `ESTADO DE CUENTA - ${expClienteNombre}`
       XLSX.utils.sheet_add_aoa(ws, [
-        ['LA GLORIA - Restaurante & Comedor'],
+        ['ÑA GLORIA - Restaurante & Comedor'],
         [titulo],
         [`Período: ${expDesde} al ${expHasta}`],
         [`Generado: ${new Date().toLocaleString('es-PY')}`],
@@ -214,7 +214,7 @@ export default function AdminDashboard() {
         ['', 'Total pagos realizados:', '', '', `Gs. ${fmtGs(totalPagos)}`],
         ['', 'Saldo pendiente:', '', '', `Gs. ${fmtGs(saldoFinal)}`],
         [],
-        ['', 'Este documento es un resumen de su cuenta corriente en La Gloria.'],
+        ['', 'Este documento es un resumen de su cuenta corriente en ÑA GLORIA.'],
       ], { origin: { r: filaResumen, c: 0 } })
 
       // ── Anchos ────────────────────────────────────────────────────────────
@@ -285,7 +285,7 @@ export default function AdminDashboard() {
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(22)
       doc.setTextColor(...BLANCO)
-      doc.text('LA GLORIA', 14, 14)
+      doc.text('ÑA GLORIA', 14, 14)
 
       // Subtítulo
       doc.setFont('helvetica', 'italic')
@@ -453,7 +453,7 @@ export default function AdminDashboard() {
         doc.setFont('helvetica', 'italic')
         doc.setFontSize(7)
         doc.setTextColor(...DORADO2)
-        doc.text('La Gloria - Documento confidencial para uso del cliente', 14, H - 5)
+        doc.text('ÑA GLORIA - Documento confidencial para uso del cliente', 14, H - 5)
         doc.text(`Página ${i} de ${pageCount}`, W - 14, H - 5, { align: 'right' })
       }
 
