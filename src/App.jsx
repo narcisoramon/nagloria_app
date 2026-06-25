@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useCajaStore } from './store/cajaStore'
-import { ProtectedRoute, CajeroRoute, AdminRoute } from './router/ProtectedRoute'
+import { ProtectedRoute, CajeroRoute, AdminRoute, VendedorRoute } from './router/ProtectedRoute'
 import Login from './pages/Login'
 import AperturaCaja from './pages/AperturaCaja'
 import EsperandoCaja from './pages/EsperandoCaja'
@@ -15,15 +15,8 @@ import Configuracion from './pages/Configuracion'
 import AdminDashboard from './pages/AdminDashboard'
 import ReporteVentas from './pages/ReporteVentas'
 
-function VendedorRoute({ children }) {
-  const { user } = useAuthStore()
-  if (user?.role === 'ADMINISTRADOR') return <Navigate to="/admin/dashboard" replace />
-  if (user?.role === 'CAJERO') return <Navigate to="/caja" replace />
-  return children
-}
-
 function RootRedirect() {
-  const { token, user } = useAuthStore()
+  const { token, verificarSesion } = useAuthStore()
   const { verificar } = useCajaStore()
   const [checking, setChecking] = useState(true)
   const navigate = useNavigate()
@@ -31,23 +24,26 @@ function RootRedirect() {
   useEffect(() => {
     if (!token) { navigate('/login', { replace: true }); return }
 
-    const role = user?.role
+    verificarSesion().then((valida) => {
+      if (!valida) { navigate('/login', { replace: true }); return }
+      const role = useAuthStore.getState().user?.role
 
-    if (role === 'ADMINISTRADOR') {
-      navigate('/admin/dashboard', { replace: true })
-      setChecking(false)
-      return
-    }
-
-    verificar().then((abierta) => {
-      if (role === 'VENDEDOR') {
-        navigate(abierta ? '/mostrador' : '/esperando-caja', { replace: true })
-      } else if (role === 'CAJERO') {
-        navigate(abierta ? '/caja' : '/apertura-caja', { replace: true })
-      } else {
-        navigate('/login', { replace: true })
+      if (role === 'admin') {
+        navigate('/admin/dashboard', { replace: true })
+        setChecking(false)
+        return
       }
-      setChecking(false)
+
+      verificar().then((abierta) => {
+        if (role === 'vendedor') {
+          navigate(abierta ? '/mostrador' : '/esperando-caja', { replace: true })
+        } else if (role === 'cajero') {
+          navigate(abierta ? '/caja' : '/apertura-caja', { replace: true })
+        } else {
+          navigate('/login', { replace: true })
+        }
+        setChecking(false)
+      })
     })
   }, [])
 

@@ -1,0 +1,12 @@
+The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element.
+react-dom_client.js?v=f965b427:14338 Download the React DevTools for a better development experience: https://react.dev/link/react-devtools
+Gastos.jsx:59 Uncaught (in promise) ReferenceError: setError is not defined
+    at registrar (Gastos.jsx:59:5)
+    at executeDispatch (react-dom_client.js?v=f965b427:9141:5)
+    at runWithFiberInDEV (react-dom_client.js?v=f965b427:851:66)
+    at processDispatchQueue (react-dom_client.js?v=f965b427:9167:27)
+    at react-dom_client.js?v=f965b427:9454:5
+    at batchedUpdates$1 (react-dom_client.js?v=f965b427:2044:12)
+    at dispatchEventForPluginEventSystem (react-dom_client.js?v=f965b427:9240:4)
+    at dispatchEvent (react-dom_client.js?v=f965b427:11319:29)
+    at dispatchDiscreteEvent (react-dom_client.js?v=f965b427:11301:56)

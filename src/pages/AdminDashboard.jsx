@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useCajaStore } from '../store/cajaStore'
 import client from '../api/client'
+import logger from '../utils/logger'
+import { alertar } from '../utils/alertify'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -103,8 +105,14 @@ export default function AdminDashboard() {
         deudores: deudores.slice(0, 6),
         totalDeuda: deudores.reduce((s, c) => s + parseFloat(c.saldo), 0),
       })
-    } catch (e) { console.error(e) }
-    finally { setCargando(false) }
+    } catch (e) {
+      logger.error(e)
+      setDatos({
+        totalVentas: 0, totalCredito: 0, totalGastos: 0, neto: 0,
+        cantTickets: 0, topProductos: [], pagoMap: {},
+        ultimosTickets: [], deudores: [], totalDeuda: 0,
+      })
+    } finally { setCargando(false) }
   }
 
   const handleLogout = async () => { await logout(); limpiar(); navigate('/login', { replace: true }) }
@@ -160,7 +168,7 @@ export default function AdminDashboard() {
       const movimientos = data.data || data
 
       if (movimientos.length === 0) {
-        alert('No hay movimientos en el período seleccionado')
+        alertar('No hay movimientos en el período seleccionado')
         setExportando(false)
         return
       }
@@ -230,8 +238,8 @@ export default function AdminDashboard() {
 
       XLSX.writeFile(wb, nombre)
     } catch (e) {
-      console.error(e)
-      alert('Error al exportar')
+      logger.error(e)
+      alertar('Error al exportar')
     } finally {
       setExportando(false)
     }
@@ -251,7 +259,7 @@ export default function AdminDashboard() {
       const movimientos = data.data || data
 
       if (movimientos.length === 0) {
-        alert('No hay movimientos en el período seleccionado')
+        alertar('No hay movimientos en el período seleccionado')
         setExportando(false)
         return
       }
@@ -463,8 +471,8 @@ export default function AdminDashboard() {
 
       doc.save(nombre)
     } catch (e) {
-      console.error(e)
-      alert('Error al generar PDF')
+      logger.error(e)
+      alertar('Error al generar PDF')
     } finally {
       setExportando(false)
     }

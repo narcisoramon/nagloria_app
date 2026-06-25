@@ -16,7 +16,7 @@ export default function Login() {
     e.preventDefault()
     const result = await login(form.email, form.password)
     if (result.success) {
-      navigate(result.rol === 'CAJERO' ? '/caja' : '/mostrador', { replace: true })
+      navigate(result.rol === 'cajero' ? '/caja' : '/mostrador', { replace: true })
     }
   }
 

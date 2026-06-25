@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "alertifyjs": "^1.14.0",
     "axios": "^1.16.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",

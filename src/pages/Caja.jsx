@@ -4,7 +4,10 @@ import { useAuthStore } from '../store/authStore'
 import { useCajaStore } from '../store/cajaStore'
 import { ticketsApi } from '../api/tickets'
 import { productosApi } from '../api/productos'
+import { getErrorMessage } from '../api/client'
 import client from '../api/client'
+import logger from '../utils/logger'
+import { noti, confirmar } from '../utils/alertify'
 
 const fmt = (n) => 'Gs. ' + Math.round(n || 0).toLocaleString('es-PY')
 const mins = (ts) => Math.floor((Date.now() - new Date(ts).getTime()) / 60000)
@@ -26,9 +29,7 @@ export default function Caja() {
   const [modalCliente, setModalCliente] = useState(false)
   const [formCliente, setFormCliente] = useState({ nombre:'', documento:'', telefono:'', direccion:'' })
   const [guardandoCli, setGuardandoCli] = useState(false)
-  const [errorCli, setErrorCli] = useState('')
   const [cargando, setCargando] = useState(false)
-  const [error, setError] = useState('')
   const [filtro, setFiltro] = useState('')
   const [ultimaActualizacion, setUltimaActualizacion] = useState(new Date())
 
@@ -46,7 +47,7 @@ export default function Caja() {
       setTicketSel(null)
       await cargarTickets()
     } catch (e) {
-      setError(e.response?.data?.message || 'Error al anular')
+      noti('error', getErrorMessage(e))
     } finally {
       setAnulando(false)
     }
@@ -57,7 +58,7 @@ export default function Caja() {
       const { data } = await ticketsApi.listar({ estado: 'pendiente', per_page: 50 })
       setTickets(data.data || data)
       setUltimaActualizacion(new Date())
-    } catch (e) { console.error(e) }
+    } catch (e) { logger.error('Error cargando tickets') }
   }, [])
 
   useEffect(() => {
@@ -73,22 +74,22 @@ export default function Caja() {
   }, [cargarTickets])
 
   const guardarCliente = async () => {
-    if (!formCliente.nombre) { setErrorCli('El nombre es requerido'); return }
+    if (!formCliente.nombre) { noti('error', 'El nombre es requerido'); return }
     setGuardandoCli(true)
-    setErrorCli('')
     try {
       await client.post('/clientes', { ...formCliente, activo: true })
       setModalCliente(false)
       setFormCliente({ nombre:'', documento:'', telefono:'', direccion:'' })
+      noti('success', 'Cliente creado correctamente')
     } catch (e) {
-      setErrorCli(e.response?.data?.message || 'Error al guardar')
+      noti('error', getErrorMessage(e))
     } finally {
       setGuardandoCli(false)
     }
   }
 
   const seleccionar = (t) => {
-    setTicketSel(t); setExtras([]); setFormaPago('efectivo'); setMontoPagado(''); setError('')
+    setTicketSel(t); setExtras([]); setFormaPago('efectivo'); setMontoPagado('')
   }
 
   const agregarExtra = (prod) => {
@@ -111,10 +112,9 @@ export default function Caja() {
 
   const cobrar = async () => {
     if (!ticketSel) return
-    setError('')
     const monto = parseFloat(montoPagado || totalFinal)
-    if (formaPago !== 'credito' && monto < totalFinal) { setError('El monto pagado no cubre el total'); return }
-    if (formaPago === 'credito' && !ticketSel.cliente_id) { setError('Para cuenta corriente el ticket debe tener cliente'); return }
+    if (formaPago !== 'credito' && monto < totalFinal) { noti('error', 'El monto pagado no cubre el total'); return }
+    if (formaPago === 'credito' && !ticketSel.cliente_id) { noti('error', 'Para cuenta corriente el ticket debe tener cliente'); return }
     setCargando(true)
     try {
       const pagos = formaPago !== 'credito' ? [{ forma_pago: formaPago, monto: totalBase }] : []
@@ -135,17 +135,18 @@ export default function Caja() {
           pagos: pagosExtras,
         })
       }
+      noti('success', `Ticket #${ticketSel.numero_ticket} cobrado correctamente`)
       setTicketSel(null); setExtras([]); setFormaPago('efectivo'); setMontoPagado('')
       await cargarTickets()
     } catch (e) {
       const data = e.response?.data
       if (data?.credito_disponible !== undefined) {
         const fmt2 = (n) => Math.round(n).toLocaleString('es-PY')
-        setError(
-          `${data.message} — Límite: Gs. ${fmt2(data.limite_credito)} · Saldo: Gs. ${fmt2(data.saldo_actual)} · Disponible: Gs. ${fmt2(data.credito_disponible)}`
+        noti('error',
+          `Crédito insuficiente — Límite: Gs. ${fmt2(data.limite_credito)} · Saldo: Gs. ${fmt2(data.saldo_actual)} · Disponible: Gs. ${fmt2(data.credito_disponible)}`
         )
       } else {
-        setError(data?.message || 'Error al cobrar')
+        noti('error', getErrorMessage(e))
       }
     } finally {
       setCargando(false)
@@ -169,10 +170,10 @@ export default function Caja() {
           {caja && <span style={s.navCaja}>Caja #{caja.id} · {user?.name}</span>}
         </div>
         <div style={s.navRight}>
-          <button onClick={() => { setModalCliente(true); setErrorCli('') }} style={s.navCierre}>👤+ Cliente</button>
+          <button onClick={() => setModalCliente(true)} style={s.navCierre}>👤+ Cliente</button>
           <button onClick={() => navigate('/clientes')} style={s.navCierre}>👥 Clientes</button>
           <button onClick={() => navigate('/gastos')} style={s.navCierre}>💸 Gastos</button>
-          {user?.role === 'ADMINISTRADOR' && (
+          {user?.role === 'admin' && (
             <button onClick={() => navigate('/configuracion')} style={s.navCierre}>⚙️ Config</button>
           )}
           <button onClick={() => navigate('/cierre-caja')} style={s.navCierre}>Cerrar caja</button>
@@ -312,7 +313,6 @@ export default function Caja() {
                     )}
                   </div>
                 )}
-                {error && <p style={s.error}>{error}</p>}
               </div>
               <div style={s.detFooter}>
                 <button onClick={cobrar} disabled={cargando} style={s.cobrarBtn}>
@@ -378,7 +378,6 @@ export default function Caja() {
                     placeholder={f.placeholder} style={s.modalInput} />
                 </div>
               ))}
-              {errorCli && <p style={s.modalError}>{errorCli}</p>}
             </div>
             <div style={s.modalFooter}>
               <button onClick={() => setModalCliente(false)} style={s.modalCancel}>Cancelar</button>

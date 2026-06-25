@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useCajaStore } from '../store/cajaStore'
 import client from '../api/client'
+import logger from '../utils/logger'
+import { alertar } from '../utils/alertify'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -149,8 +151,8 @@ const buscar = async () => {
     setTickets(lista)
     setBuscado(true)
   } catch (e) {
-    console.error(e)
-    alert('No se pudo obtener el reporte de ventas.')
+    logger.error(e)
+    alertar('No se pudo obtener el reporte de ventas.')
   } finally {
     setBuscando(false)
   }
@@ -493,8 +495,8 @@ const buscar = async () => {
 
       doc.save(`reporte-ventas_${desde}_${hasta}.pdf`)
     } catch (e) {
-      console.error(e)
-      alert('No se pudo generar el PDF.')
+      logger.error(e)
+      alertar('No se pudo generar el PDF.')
     } finally {
       setExportando(false)
     }

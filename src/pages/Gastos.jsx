@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useCajaStore } from '../store/cajaStore'
 import client from '../api/client'
+import logger from '../utils/logger'
+import { noti, confirmar } from '../utils/alertify'
 
 const fmt = (n) => 'Gs. ' + Math.round(n || 0).toLocaleString('es-PY')
 const parseFmt = (raw) => parseInt(raw.replace(/\D/g, '') || '0')
@@ -15,7 +17,6 @@ export default function Gastos() {
   const [gastos, setGastos] = useState([])
   const [categorias, setCategorias] = useState([])
   const [cargando, setCargando] = useState(false)
-  const [error, setError] = useState('')
   const [exito, setExito] = useState('')
 
   // Formulario
@@ -43,7 +44,7 @@ export default function Gastos() {
       ])
       setGastos(resGastos.data.data || resGastos.data)
       setCategorias(resCats.data.data || resCats.data)
-    } catch (e) { console.error(e) }
+    } catch (e) { logger.error(e) }
   }
 
   const handlePrecio = (e) => {
@@ -55,8 +56,6 @@ export default function Gastos() {
     e.preventDefault()
     if (!concepto || !precio) return
     setCargando(true)
-    setError('')
-    setExito('')
     try {
       const conceptoFinal = cant > 1 ? `${concepto} (x${cant})` : concepto
       await client.post('/gastos', {
@@ -70,26 +69,28 @@ export default function Gastos() {
       setPrecioRaw('')
       setObservacion('')
       setCategoriaId('')
-      setExito('Gasto registrado correctamente')
-      setTimeout(() => setExito(''), 3000)
+      noti('success', 'Gasto registrado correctamente')
       await cargarDatos()
     } catch (e) {
-      setError(e.response?.data?.message || 'Error al registrar gasto')
+      noti('error', e.response?.data?.message || 'Error al registrar gasto')
     } finally {
       setCargando(false)
     }
   }
 
-  const anular = async () => {
-    if (!motivo.trim()) return
-    try {
-      await client.post(`/gastos/${anulando.id}/anular`, { motivo })
-      setAnulando(null)
-      setMotivo('')
-      await cargarDatos()
-    } catch (e) {
-      setError(e.response?.data?.message || 'Error al anular')
-    }
+  const confirmarAnular = () => {
+    confirmar(`¿Anular "${anulando.concepto}" (${fmt(anulando.monto)})?`, async () => {
+      if (!motivo.trim()) return
+      try {
+        await client.post(`/gastos/${anulando.id}/anular`, { motivo })
+        setAnulando(null)
+        setMotivo('')
+        noti('success', 'Gasto anulado correctamente')
+        await cargarDatos()
+      } catch (e) {
+        noti('error', e.response?.data?.message || 'Error al anular')
+      }
+    })
   }
 
   const totalActivos = gastos
@@ -179,7 +180,6 @@ export default function Gastos() {
               />
             </div>
 
-            {error && <p style={s.error}>{error}</p>}
             {exito && <p style={s.exito}>{exito}</p>}
 
             <button type="submit" disabled={cargando || !montoTotal} style={{...s.btn, opacity: !montoTotal ? 0.4 : 1}}>
@@ -262,7 +262,7 @@ export default function Gastos() {
             </div>
             <div style={s.modalBtns}>
               <button onClick={() => setAnulando(null)} style={s.modalCancel}>Cancelar</button>
-              <button onClick={anular} disabled={!motivo.trim()} style={s.modalConfirm}>
+              <button onClick={confirmarAnular} disabled={!motivo.trim()} style={s.modalConfirm}>
                 Confirmar anulación
               </button>
             </div>

@@ -5,11 +5,16 @@ import { useCajaStore } from '../store/cajaStore'
 import { productosApi } from '../api/productos'
 import { recipientesApi } from '../api/recipientes'
 import { ticketsApi } from '../api/tickets'
+import { getErrorMessage } from '../api/client'
 import client from '../api/client'
+import { getAbortSignal } from '../utils/http'
+import { sanitizeUrl } from '../utils/sanitize'
+import logger from '../utils/logger'
+import { noti } from '../utils/alertify'
+import { LogOut, ShoppingCart, Scale, Package, Plus, X, Check } from 'lucide-react'
 
 const fmt = (n) => 'Gs. ' + Math.round(n || 0).toLocaleString('es-PY')
 
-// ── Buscador de clientes con autocompletado ──────────────────────────────────
 function BuscadorCliente({ clienteSeleccionado, onSeleccionar }) {
   const [busqueda, setBusqueda] = useState('')
   const [resultados, setResultados] = useState([])
@@ -17,8 +22,8 @@ function BuscadorCliente({ clienteSeleccionado, onSeleccionar }) {
   const [abierto, setAbierto] = useState(false)
   const timerRef = useRef(null)
   const wrapRef = useRef(null)
+  const searchCtrlRef = useRef(null)
 
-  // Cerrar al hacer clic afuera
   useEffect(() => {
     const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setAbierto(false) }
     document.addEventListener('mousedown', handler)
@@ -33,14 +38,20 @@ function BuscadorCliente({ clienteSeleccionado, onSeleccionar }) {
     timerRef.current = setTimeout(async () => {
       setBuscando(true)
       try {
-        const { data } = await client.get('/clientes', { params: { buscar: texto, per_page: 10 } })
+        const signal = getAbortSignal(searchCtrlRef)
+        const { data } = await client.get('/clientes', { params: { buscar: texto, per_page: 10 }, signal })
         setResultados(data.data || data)
-      } catch { setResultados([]) }
+      } catch (err) {
+        if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+          setResultados([])
+        }
+      }
       finally { setBuscando(false) }
     }, 300)
   }
 
   const seleccionar = (cli) => {
+    if (searchCtrlRef.current) searchCtrlRef.current.abort()
     onSeleccionar(cli)
     setBusqueda('')
     setResultados([])
@@ -113,17 +124,14 @@ export default function Mostrador() {
   const [categorias, setCategorias] = useState([])
   const [catActiva, setCatActiva] = useState(null)
 
-  // Carrito
   const [items, setItems] = useState([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
 
-  // Pesaje inline
   const [pesando, setPesando] = useState(false)
   const [recIdx, setRecIdx] = useState(0)
   const [pesoBruto, setPesoBruto] = useState('')
   const [prodPeso, setProdPeso] = useState(null)
 
-  // Estado
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
   const [ticketOk, setTicketOk] = useState(null)
@@ -144,14 +152,13 @@ export default function Mostrador() {
       setProductos(prods)
       setRecipientes(recs)
       if (cats.length > 0) setCatActiva(cats[0].id)
-    } catch (e) { console.error(e) }
+    } catch (e) { logger.error('Error cargando datos del mostrador') }
   }
 
   const productosFiltrados = catActiva
     ? productos.filter((p) => p.categoria_producto_id === catActiva)
     : productos
 
-  // Clic en producto por UNIDAD → suma directo
   const clickProducto = (prod) => {
     if (prod.tipo_venta === 'KILO') {
       setProdPeso(prod)
@@ -217,7 +224,6 @@ export default function Mostrador() {
     setEnviando(true)
     setError('')
     try {
-      // El backend calcula subtotales — solo mandamos producto_id, cantidad, recipiente_id, peso_bruto_kg
       const itemsPayload = items.map((i) => ({
         producto_id: i.prod_id,
         cantidad: i.tipo === 'UNIDAD' ? i.cantidad : null,
@@ -233,13 +239,13 @@ export default function Mostrador() {
         items: itemsPayload,
       })
 
+      noti('success', `Ticket #${(data.data||data).numero_ticket} enviado a caja`)
       setTicketOk(data.data || data)
       setItems([])
       setClienteSeleccionado(null)
       setPesando(false)
     } catch (e) {
-      setError(e.response?.data?.message || 'Error al emitir el ticket')
-      console.error(e.response?.data)
+      noti('error', getErrorMessage(e))
     } finally {
       setEnviando(false)
     }
@@ -250,23 +256,22 @@ export default function Mostrador() {
     navigate('/login', { replace: true })
   }
 
-  // ── Pantalla de confirmación ──
   if (ticketOk) {
     return (
       <div style={s.root}>
         <nav style={s.nav}>
           <div style={s.navLeft}><div style={s.navLogo}>ÑG</div><span style={s.navTitulo}>Mostrador</span></div>
-          <div style={s.navRight}><span style={s.navUser}>{user?.name}</span><button onClick={handleLogout} style={s.navLogout}>Salir</button></div>
+          <div style={s.navRight}><span style={s.navUser}>{user?.name}</span><button onClick={handleLogout} style={s.navLogout}><LogOut size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Salir</button></div>
         </nav>
         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:'#faf7f2'}}>
           <div style={s.ticketOkBox}>
-            <div style={s.ticketOkCheck}>✓</div>
+            <div style={s.ticketOkCheck}><Check size={40} /></div>
             <p style={s.ticketOkLabel}>Ticket emitido</p>
             <div style={s.ticketOkNum}>#{ticketOk.numero_ticket || ticketOk.id}</div>
             <div style={s.ticketOkTotal}>{fmt(ticketOk.total)}</div>
             {ticketOk.cliente && <p style={s.ticketOkCli}>Cliente: {ticketOk.cliente.nombre}</p>}
             <p style={s.ticketOkHint}>El cliente presenta este número en caja</p>
-            <button onClick={() => setTicketOk(null)} style={s.nuevoBtn}>+ Nuevo ticket</button>
+            <button onClick={() => setTicketOk(null)} style={s.nuevoBtn}><Plus size={16} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Nuevo ticket</button>
           </div>
         </div>
       </div>
@@ -281,13 +286,12 @@ export default function Mostrador() {
       </nav>
 
       <div style={s.body}>
-        {/* ── Panel izquierdo ── */}
         <div style={s.panelIzq}>
           <div style={s.cats}>
             <button
               style={{...s.catBtn, ...(catActiva===null ? s.catBtnOn : {})}}
               onClick={() => setCatActiva(null)}>
-              Todos
+              <Package size={12} style={{ marginRight: 4 }} /> Todos
             </button>
             {categorias.map((c) => (
               <button key={c.id}
@@ -297,11 +301,15 @@ export default function Mostrador() {
               </button>
             ))}
           </div>
-          <p style={s.hint}>Tocá para agregar · ⚖️ = por peso</p>
+          <p style={s.hint}>Tocá para agregar · <Scale size={11} style={{ verticalAlign: 'middle' }} /> = por peso</p>
           <div style={s.grid}>
             {productosFiltrados.map((p) => (
               <button key={p.id} style={s.prodCard} onClick={() => clickProducto(p)}>
-                <span style={s.prodIcon}>{p.tipo_venta==='KILO' ? '⚖️' : '📦'}</span>
+                {p.imagen_url ? (
+                  <img src={sanitizeUrl(p.imagen_url) || ''} alt={p.nombre} style={s.prodImg} />
+                ) : (
+                  <span style={s.prodIcon}>{p.tipo_venta==='KILO' ? <Scale size={18} /> : <Package size={18} />}</span>
+                )}
                 <span style={s.prodNombre}>{p.nombre}</span>
                 <span style={s.prodPrecio}>
                   {fmt(p.precio)}<span style={s.prodUnit}>/{p.tipo_venta==='KILO'?'kg':'und'}</span>
@@ -311,12 +319,11 @@ export default function Mostrador() {
             {productosFiltrados.length === 0 && <p style={s.empty}>Sin productos</p>}
           </div>
 
-          {/* Panel pesaje inline */}
           {pesando && prodPeso && (
             <div style={s.pesoPanel}>
               <div style={s.pesoPanelHeader}>
-                <span style={s.pesoPanelTitulo}>⚖️ {prodPeso.nombre} — {fmt(prodPeso.precio)}/kg</span>
-                <button onClick={() => {setPesando(false);setProdPeso(null);setPesoBruto('')}} style={s.pesoCancelBtn}>✕ Cancelar</button>
+                <span style={s.pesoPanelTitulo}><Scale size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {prodPeso.nombre} — {fmt(prodPeso.precio)}/kg</span>
+                <button onClick={() => {setPesando(false);setProdPeso(null);setPesoBruto('')}} style={s.pesoCancelBtn}><X size={14} style={{ marginRight: 2, verticalAlign: 'middle' }} /> Cancelar</button>
               </div>
               <div style={s.pesoRow}>
                 <div style={s.pesoField}>
@@ -337,7 +344,7 @@ export default function Mostrador() {
                 </div>
                 <button onClick={agregarPesado} disabled={netoPreview<=0}
                   style={{...s.pesoAgregarBtn, opacity: netoPreview>0?1:0.4}}>
-                  Agregar
+                  <Plus size={14} style={{ marginRight: 3, verticalAlign: 'middle' }} /> Agregar
                 </button>
               </div>
               {netoPreview > 0 && (
@@ -349,14 +356,12 @@ export default function Mostrador() {
           )}
         </div>
 
-        {/* ── Panel ticket ── */}
         <div style={s.panelTicket}>
           <div style={s.ticketHeader}>
-            <h2 style={s.ticketTitulo}>🧾 Ticket</h2>
-            {items.length > 0 && <button onClick={() => setItems([])} style={s.limpiarBtn}>Limpiar</button>}
+            <h2 style={s.ticketTitulo}><ShoppingCart size={16} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Ticket</h2>
+            {items.length > 0 && <button onClick={() => setItems([])} style={s.limpiarBtn}><X size={13} style={{ marginRight: 2, verticalAlign: 'middle' }} /> Limpiar</button>}
           </div>
 
-          {/* Buscador cliente */}
           <div style={s.clienteBox}>
             <label style={s.clienteLabel}>Cliente</label>
             <BuscadorCliente
@@ -396,7 +401,7 @@ export default function Mostrador() {
             {error && <p style={s.error}>{error}</p>}
             <button onClick={emitirTicket} disabled={items.length===0||enviando}
               style={{...s.emitirBtn, opacity: items.length===0?0.4:1}}>
-              {enviando ? 'Emitiendo…' : '✓ Emitir Ticket'}
+              {enviando ? 'Emitiendo…' : <><Check size={16} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Emitir Ticket</>}
             </button>
           </div>
         </div>
@@ -422,6 +427,7 @@ const s = {
   hint: { fontSize:11, color:'#8a7560', padding:'4px 0.7rem', background:'#faf7f2', borderBottom:'1px solid #f0e8dc' },
   grid: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(140px, 100%),1fr))', gap:'0.7rem', padding:'0.8rem', overflowY:'auto', flex:1 },
   prodCard: { background:'#fff', border:'1px solid #e8e0d0', borderRadius:10, padding:'0.8rem', display:'flex', flexDirection:'column', gap:5, cursor:'pointer', textAlign:'left' },
+  prodImg: { width:'100%', height:80, objectFit:'cover', borderRadius:6, background:'#f5f0ea' },
   prodIcon: { fontSize:18 },
   prodNombre: { fontSize:13, fontWeight:600, color:'#2c1a08', lineHeight:1.3 },
   prodPrecio: { fontSize:12, color:'#b8732a', fontWeight:700 },
@@ -444,7 +450,6 @@ const s = {
   limpiarBtn: { background:'transparent', border:'none', color:'#c0392b', fontSize:12, cursor:'pointer' },
   clienteBox: { padding:'0.6rem 1rem', borderBottom:'1px solid #f0e8dc' },
   clienteLabel: { fontSize:11, fontWeight:600, color:'#4a3520', display:'block', marginBottom:4 },
-  clienteSelect: { width:'100%', padding:'6px 10px', border:'1px solid #ddd0be', borderRadius:7, fontSize:13, background:'#fdfaf6', outline:'none' },
   itemsList: { flex:1, overflowY:'auto', padding:'0.4rem' },
   vacio: { display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#8a7560', fontSize:13, padding:'2rem', textAlign:'center' },
   itemRow: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'0.6rem 0.4rem', borderBottom:'1px solid #f5f0ea', gap:'0.4rem' },

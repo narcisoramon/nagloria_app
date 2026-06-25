@@ -2,7 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useCajaStore } from '../store/cajaStore'
+import { getErrorMessage } from '../api/client'
 import client from '../api/client'
+import { getAbortSignal } from '../utils/http'
+import logger from '../utils/logger'
+import { noti } from '../utils/alertify'
 
 const fmt = (n) => 'Gs. ' + Math.round(n || 0).toLocaleString('es-PY')
 
@@ -23,13 +27,11 @@ export default function Clientes() {
   const [formaPago, setFormaPago] = useState('efectivo')
   const [referencia, setReferencia] = useState('')
   const [pagando, setPagando] = useState(false)
-  const [error, setError] = useState('')
-  const [exito, setExito] = useState('')
-
   const [clientesDeudores, setClientesDeudores] = useState([])
   const [cargandoDeudores, setCargandoDeudores] = useState(false)
 
   const timerRef = useRef(null)
+  const searchCtrlRef = useRef(null)
 
   useEffect(() => { cargarDeudores() }, [])
 
@@ -38,7 +40,7 @@ export default function Clientes() {
     try {
       const { data } = await client.get('/clientes/con-saldo')
       setClientesDeudores(data.data || data)
-    } catch (e) { console.error(e) }
+    } catch (e) { logger.error('Error cargando deudores') }
     finally { setCargandoDeudores(false) }
   }
 
@@ -49,9 +51,14 @@ export default function Clientes() {
     timerRef.current = setTimeout(async () => {
       setBuscando(true)
       try {
-        const { data } = await client.get('/clientes', { params: { buscar: texto, per_page: 10 } })
+        const signal = getAbortSignal(searchCtrlRef)
+        const { data } = await client.get('/clientes', { params: { buscar: texto, per_page: 10 }, signal })
         setResultados(data.data || data)
-      } catch { setResultados([]) }
+      } catch (err) {
+        if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+          setResultados([])
+        }
+      }
       finally { setBuscando(false) }
     }, 300)
   }
@@ -60,26 +67,26 @@ export default function Clientes() {
     setClienteSel(cli)
     setResultados([])
     setBusqueda('')
-    setError('')
-    setExito('')
     setMonto('')
     setCargandoDet(true)
     try {
       const { data } = await client.get(`/clientes/${cli.id}`)
       const cliente = data.data || data
 
-      // Calcular saldo actual desde cuenta corriente
-      const resCuenta = await client.get('/pago-clientes', {
-        params: { cliente_id: cli.id, per_page: 1 }
-      })
-
-      // Obtener último saldo de cuenta corriente
-      const resCuenta2 = await client.get('/tickets', {
-        params: { cliente_id: cli.id, tipo_venta: 'credito', per_page: 200 }
-      })
+      // Si la API no devuelve cuenta_corriente, tomar saldo desde la lista de deudores
+      if ((!cliente.cuenta_corriente || cliente.cuenta_corriente.length === 0) && cli.saldo) {
+        cliente.cuenta_corriente = [{
+          id: 0,
+          tipo_movimiento: 'DEBITO',
+          concepto: 'Saldo pendiente',
+          monto: cli.saldo,
+          saldo_actual: cli.saldo,
+          fecha_hora: new Date().toISOString(),
+        }]
+      }
 
       setDetalle(cliente)
-    } catch (e) { console.error(e) }
+    } catch (e) { logger.error('Error cargando detalle cliente') }
     finally { setCargandoDet(false) }
   }
 
@@ -91,10 +98,9 @@ export default function Clientes() {
   const montoNum = parseInt(String(monto).replace(/\D/g, '') || '0')
 
   const registrarPago = async () => {
-    if (!montoNum || montoNum <= 0) { setError('Ingresá un monto válido'); return }
-    if (montoNum > saldoCC) { setError('El monto no puede superar el saldo pendiente'); return }
+    if (!montoNum || montoNum <= 0) { noti('error', 'Ingresá un monto válido'); return }
+    if (montoNum > saldoCC) { noti('error', 'El monto no puede superar el saldo pendiente'); return }
     setPagando(true)
-    setError('')
     try {
       await client.post('/pago-clientes', {
         cliente_id: clienteSel.id,
@@ -102,16 +108,15 @@ export default function Clientes() {
         forma_pago: formaPago,
         referencia: referencia || null,
       })
-      setExito(`Pago de ${fmt(montoNum)} registrado correctamente`)
+      noti('success', `Pago de ${fmt(montoNum)} registrado correctamente`)
       setMonto('')
       setReferencia('')
-      setTimeout(() => setExito(''), 4000)
       // Recargar detalle y lista de deudores
       const { data } = await client.get(`/clientes/${clienteSel.id}`)
       setDetalle(data.data || data)
       cargarDeudores()
     } catch (e) {
-      setError(e.response?.data?.message || 'Error al registrar el pago')
+      noti('error', getErrorMessage(e))
     } finally {
       setPagando(false)
     }
@@ -266,9 +271,6 @@ export default function Clientes() {
                     </div>
                   )}
 
-                  {error && <p style={s.error}>{error}</p>}
-                  {exito && <p style={s.exito}>{exito}</p>}
-
                   <button onClick={registrarPago} disabled={pagando || !montoNum}
                     style={{...s.pagarBtn, opacity: !montoNum ? 0.4 : 1}}>
                     {pagando ? 'Registrando…' : `✓ Registrar pago ${montoNum ? fmt(montoNum) : ''}`}
@@ -378,8 +380,6 @@ const s = {
   montoBtns: { display:'flex', gap:'0.4rem', marginTop:4, flexWrap:'wrap' },
   montoBtn: { padding:'4px 10px', background:'#f0e8dc', border:'1px solid #ddd0be', borderRadius:6, fontSize:11, cursor:'pointer', color:'#4a3520' },
   input: { padding:'8px 10px', border:'1px solid #ddd0be', borderRadius:7, fontSize:14, outline:'none', background:'#fdfaf6' },
-  error: { fontSize:12, color:'#c0392b', background:'#fdf0ef', borderRadius:6, padding:'6px 10px', margin:0 },
-  exito: { fontSize:12, color:'#1a7a4a', background:'#f0fdf4', border:'1px solid #a9dfbf', borderRadius:6, padding:'6px 10px', margin:0 },
   pagarBtn: { padding:'11px', background:'#1a7a4a', color:'#fff', border:'none', borderRadius:8, fontSize:14, fontWeight:700, cursor:'pointer' },
 
   histBox: { padding:'1.2rem', overflowY:'auto' },

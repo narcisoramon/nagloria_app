@@ -19,7 +19,7 @@ export default function AperturaCaja() {
   useEffect(() => {
     verificar().then((abierta) => {
       if (abierta) {
-        const dest = ['CAJERO', 'ADMINISTRADOR'].includes(user?.role) ? '/caja' : '/mostrador'
+        const dest = ['cajero', 'admin'].includes(user?.role) ? '/caja' : '/mostrador'
         navigate(dest, { replace: true })
       }
     })
@@ -42,7 +42,7 @@ export default function AperturaCaja() {
     if (result.success) {
       // Verificar para sincronizar el store
       await verificar()
-      const dest = ['CAJERO', 'ADMINISTRADOR'].includes(user?.role) ? '/caja' : '/mostrador'
+      const dest = ['cajero', 'admin'].includes(user?.role) ? '/caja' : '/mostrador'
       navigate(dest, { replace: true })
     }
   }

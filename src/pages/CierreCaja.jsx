@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useCajaStore } from '../store/cajaStore'
 import client from '../api/client'
+import logger from '../utils/logger'
+import { noti, confirmar } from '../utils/alertify'
 
 const fmt = (n) => 'Gs. ' + Math.round(n || 0).toLocaleString('es-PY')
 const parseFmt = (raw) => parseInt(String(raw).replace(/\D/g, '') || '0')
@@ -61,8 +63,8 @@ export default function CierreCaja() {
         gastos,
       })
     } catch (e) {
-      console.error(e)
-      setError('Error al cargar el resumen de caja')
+      logger.error(e)
+      noti('error', 'Error al cargar el resumen de caja')
     } finally {
       setCargando(false)
     }
@@ -72,9 +74,8 @@ export default function CierreCaja() {
   const diferencia = resumen ? montoReal - resumen.totalSistema : 0
 
   const cerrar = async () => {
-    if (!montoReal) { setError('Ingresá el monto real en caja'); return }
+    if (!montoReal) { noti('error', 'Ingresá el monto real en caja'); return }
     setCerrando(true)
-    setError('')
     try {
       const { data } = await client.post('/cierre-cajas/cerrar', {
         monto_real: montoReal,
@@ -83,7 +84,7 @@ export default function CierreCaja() {
       limpiar()
       setCierreFinal(data)
     } catch (e) {
-      setError(e.response?.data?.message || 'Error al cerrar la caja')
+      noti('error', e.response?.data?.message || 'Error al cerrar la caja')
     } finally {
       setCerrando(false)
     }
@@ -245,8 +246,6 @@ export default function CierreCaja() {
                 style={s.input}
               />
             </div>
-
-            {error && <p style={s.error}>{error}</p>}
 
             <div style={s.aviso}>
               ⚠️ Esta acción cerrará la caja del turno. El vendedor no podrá emitir más tickets hasta que se abra una nueva caja.

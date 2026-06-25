@@ -1,12 +1,14 @@
 import { create } from 'zustand'
 import { cajaApi } from '../api/caja'
+import { getErrorMessage } from '../api/client'
+import logger from '../utils/logger'
 
 const getStoredCaja = () => {
   try { return JSON.parse(localStorage.getItem('caja')) || null } catch { return null }
 }
 
 export const useCajaStore = create((set, get) => ({
-  caja: getStoredCaja(),      // aperturaCaja completa
+  caja: getStoredCaja(),
   loading: false,
   error: null,
 
@@ -25,7 +27,8 @@ export const useCajaStore = create((set, get) => ({
         set({ caja: null, loading: false })
       }
       return data.abierta
-    } catch {
+    } catch (err) {
+      logger.error('Error verificando caja')
       set({ loading: false })
       return false
     }
@@ -39,7 +42,7 @@ export const useCajaStore = create((set, get) => ({
       set({ caja: data.data, loading: false })
       return { success: true }
     } catch (err) {
-      const message = err.response?.data?.message || 'Error al abrir la caja'
+      const message = getErrorMessage(err)
       set({ loading: false, error: message })
       return { success: false, error: message }
     }
@@ -53,7 +56,7 @@ export const useCajaStore = create((set, get) => ({
       set({ caja: null, loading: false })
       return { success: true, resumen: data.resumen }
     } catch (err) {
-      const message = err.response?.data?.message || 'Error al cerrar la caja'
+      const message = getErrorMessage(err)
       set({ loading: false, error: message })
       return { success: false, error: message }
     }
